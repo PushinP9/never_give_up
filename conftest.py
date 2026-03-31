@@ -1,0 +1,79 @@
+from faker import Faker
+import pytest
+import requests
+from constants import BASE_URL, REGISTER_ENDPOINT, LOGIN_ENDPOINT
+from custom_requester.custom_requester import CustomRequester
+from utils.data_generator import DataGeneration
+import random
+faker = Faker()
+fake = Faker()
+
+@pytest.fixture(scope="session")
+def test_user():
+    """
+    Генерация случайного пользователя для тестов.
+    """
+    random_email = DataGeneration.generate_random_email()
+    random_name = DataGeneration.generate_random_name()
+    random_password = DataGeneration.generate_random_password()
+
+    return {
+        "email": random_email,
+        "fullName": random_name,
+        "password": random_password,
+        "passwordRepeat": random_password,
+        "roles": ["USER"]
+    }
+
+@pytest.fixture(scope="session")
+def registered_user(requester, test_user):
+    """
+    Фикстура для регистрации и получения данных зарегистрированного пользователя.
+    """
+    response = requester.send_request(
+        method="POST",
+        endpoint=REGISTER_ENDPOINT,
+        data=test_user,
+        expected_status=201
+    )
+    response_data = response.json()
+    registered_user = test_user.copy()
+    registered_user["id"] = response_data["id"]
+    return registered_user
+
+@pytest.fixture(scope="session")
+def requester():
+    """
+    Фикстура для создания экземпляра CustomRequester.
+    """
+    session = requests.Session()
+    return CustomRequester(session=session, base_url=BASE_URL)
+
+
+
+
+@pytest.fixture(scope="session")
+def super_admin_token():
+    # Укажите URL и полезную нагрузку в соответствии с вашей системой авторизации
+    auth_url = "https://auth.dev-cinescope.coconutqa.ru/login"
+    response = requests.post(auth_url, json={"email": "api1@gmail.com", "password": "asdqwe123Q"})
+    assert response.status_code == 200
+    return response.json()["accessToken"]
+
+
+
+
+
+@pytest.fixture
+def random_movie():
+    """Фикстура, которая возвращает готовый словарь с данными фильма"""
+    return {
+        "name": fake.sentence(nb_words=3),
+        "description": fake.paragraph(nb_sentences=2),
+        "price": random.choice([199, 299, 399, 499, 999]),
+        "location": "SPB",
+        "published": True,
+        "genreId": 1
+    }
+
+
