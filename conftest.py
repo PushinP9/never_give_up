@@ -77,3 +77,23 @@ def random_movie():
     }
 
 
+
+@pytest.fixture
+def created_movie(requester, super_admin_token, random_movie):
+    """
+    Фикстура создает фильм перед тестом и возвращает его данные.
+    Использует CustomRequester для создания.
+    """
+    # Устанавливаем токен в заголовки реквестера
+    requester.headers.update({"Authorization": f"Bearer {super_admin_token}"})
+
+    response = requester.send_request(
+        method="POST",
+        endpoint="/movies",
+        data=random_movie,
+        expected_status=201
+    )
+
+    movie_data = response.json()
+    # Возвращаем данные созданного фильма (включая ID)
+    yield movie_data
