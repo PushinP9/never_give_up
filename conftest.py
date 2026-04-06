@@ -5,6 +5,7 @@ from constants import BASE_URL, REGISTER_ENDPOINT, LOGIN_ENDPOINT
 from custom_requester.custom_requester import CustomRequester
 from utils.data_generator import DataGeneration
 import random
+from clients.movies_api import MoviesAPI
 faker = Faker()
 fake = Faker()
 
@@ -79,21 +80,27 @@ def random_movie():
 
 
 @pytest.fixture
-def created_movie(requester, super_admin_token, random_movie):
+def created_movie(movies_api, random_movie):
     """
-    Фикстура создает фильм перед тестом и возвращает его данные.
-    Использует CustomRequester для создания.
+    Фикстура создает фильм, используя методы клиента MoviesAPI.
     """
-    # Устанавливаем токен в заголовки реквестера
-    requester.headers.update({"Authorization": f"Bearer {super_admin_token}"})
+    response = movies_api.create_movie(random_movie)
+    return response.json()
 
-    response = requester.send_request(
-        method="POST",
-        endpoint="/movies",
-        data=random_movie,
-        expected_status=201
-    )
 
-    movie_data = response.json()
-    # Возвращаем данные созданного фильма (включая ID)
-    yield movie_data
+@pytest.fixture(scope="session")
+def movies_api(requester, super_admin_token):
+    """
+    Фикстура для доступа к методам MoviesAPI.
+    Токен прокидывается один раз при создании клиента.
+    """
+    return MoviesAPI(session=requester.session, token=super_admin_token)
+
+@pytest.fixture
+def unauthorized_movies_api():
+    """
+    Фикстура создает клиент MoviesAPI без токена авторизации.
+    Используется для тестов на проверку прав доступа (401 Unauthorized).
+    """
+    session = requests.Session()
+    return MoviesAPI(session=session, token=None)

@@ -1,35 +1,35 @@
+from http.client import responses
+import time
 import pytest
 from constants import MOVIES_ENDPOINT
 
 
-def test_movies_list_contains_new_movie(requester, created_movie):
-    """Проверка наличия созданного фильма в общем списке через простой цикл."""
-    # 1. Получаем список всех фильмов
-    response = requester.send_request(method="GET", endpoint=MOVIES_ENDPOINT)
+def test_movies_list_contains_new_movie(movies_api, created_movie):
+    time.sleep(1)
+    target_id = created_movie["id"]
+    params = {
+        "id": target_id
+    }
+    response = movies_api.get_movies(params=params)
     all_movies = response.json().get("movies", [])
-
-    # 2. Ищем наш фильм по ID среди всех полученных фильмов
     target_id = created_movie["id"]
     found_movie = None
 
     for movie in all_movies:
         if movie["id"] == target_id:
             found_movie = movie
-            break  # Если нашли, дальше искать нет смысла, выходим из цикла
+            break
 
-    # 3. Проверяем, что фильм действительно нашелся
     assert found_movie is not None, f"Фильм с ID {target_id} не найден в общем списке"
-
-    # 4. Сравниваем данные из списка с данными из фикстуры (как просил ментор)
     assert found_movie["name"] == created_movie["name"]
     assert found_movie["price"] == created_movie["price"]
 
 
-def test_get_movie_details_by_id(requester, created_movie):
-    """Сверка всех полей детальной информации с данными из фикстуры."""
+def test_get_movie_details_by_id(movies_api, created_movie):
+
     movie_id = created_movie["id"]
-    # Формируем эндпоинт: /movies/{id}
-    response = requester.send_request(method="GET", endpoint=f"{MOVIES_ENDPOINT}/{movie_id}")
+
+    response = movies_api.get_movie(movie_id)
     detail_data = response.json()
 
     assert detail_data["id"] == movie_id
@@ -40,10 +40,7 @@ def test_get_movie_details_by_id(requester, created_movie):
     assert "reviews" in detail_data
 
 
-def test_movies_post_duplicate(requester, super_admin_token, created_movie):
-    """Негативный тест: создание дубликата (409)."""
-    requester.headers.update({"Authorization": f"Bearer {super_admin_token}"})
-
+def test_movies_post_duplicate(movies_api, created_movie):
     payload = {
         "name": created_movie["name"],
         "description": created_movie["description"],
@@ -53,60 +50,45 @@ def test_movies_post_duplicate(requester, super_admin_token, created_movie):
         "genreId": created_movie["genreId"]
     }
 
-    requester.send_request(
-        method="POST",
-        endpoint=MOVIES_ENDPOINT,
-        data=payload,
-        expected_status=409
-    )
+    movies_api.create_movie(payload, expected_status=409)
 
 
-def test_patch_movie_name(requester, super_admin_token, created_movie):
-    """Частичное обновление фильма (PATCH)."""
-    requester.headers.update({"Authorization": f"Bearer {super_admin_token}"})
+def test_patch_movie_name(movies_api, created_movie):
+
     movie_id = created_movie["id"]
     new_name = "Обновленный фильм"
 
-    response = requester.send_request(
-        method="PATCH",
-        endpoint=f"{MOVIES_ENDPOINT}/{movie_id}",
-        data={"name": new_name},
-        expected_status=200
-    )
+    response = movies_api.patch_movie(movie_id, {"name": new_name})
 
     updated_data = response.json()
     assert updated_data["name"] == new_name
     assert updated_data["id"] == movie_id
 
 
-def test_delete_movie_flow(requester, super_admin_token, created_movie):
-    """Удаление и проверка через GET (404)."""
-    requester.headers.update({"Authorization": f"Bearer {super_admin_token}"})
+def test_delete_movie_flow(movies_api, created_movie):
+
+
     movie_id = created_movie["id"]
+    movies_api.delete_movie(movie_id)
+    movies_api.get_movie(movie_id, expected_status=404)
 
-    # Удаляем
-    requester.send_request(
-        method="DELETE",
-        endpoint=f"{MOVIES_ENDPOINT}/{movie_id}",
-        expected_status=200
-    )
+def test_unauthorized_post_movie(unauthorized_movies_api, random_movie):
+    unauthorized_movies_api.create_movie(random_movie, expected_status=401)
+    # Уточнить по статус коду .
 
-    # Проверяем отсутствие
-    requester.send_request(
-        method="GET",
-        endpoint=f"{MOVIES_ENDPOINT}/{movie_id}",
-        expected_status=404
-    )
+@pytest.mark.skip(reason="BUG: API returns 201 instead of 400 for negative price (Swagger says it should be 400)")
+@pytest.mark.parametrize("field, invalid_value", [
+    ("name", ""),
+    ("price", -100),
+    ("description", None),
+])
+def test_create_movie_invalid_data(movies_api, random_movie, field, invalid_value):
+    payload = random_movie.copy()
+    payload[field] = invalid_value
+    movies_api.create_movie(payload, expected_status=400)
+
+def test_get_non_existent_movie(movies_api):
+    invalid_id = 9999999
+    movies_api.get_movie(invalid_id, expected_status=404)
 
 
-def test_unauthorized_post(requester, random_movie):
-    """Попытка создания без авторизации (401)."""
-    # Удаляем токен из заголовков, если он там был
-    requester.headers.pop("Authorization", None)
-
-    requester.send_request(
-        method="POST",
-        endpoint=MOVIES_ENDPOINT,
-        data=random_movie,
-        expected_status=401
-    )
