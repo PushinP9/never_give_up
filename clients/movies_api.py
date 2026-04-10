@@ -1,21 +1,11 @@
-from http import HTTPStatus
-try:
-    from http import HTTPMethod
-except ImportError:
-    class HTTPMethod:
-        GET = 'GET'
-        POST = 'POST'
-        PATCH = 'PATCH'
-        DELETE = 'DELETE'
-
+from http import HTTPStatus,HTTPMethod
 from constants import MOVIES_ENDPOINT, BASE_URL
 from custom_requester.custom_requester import CustomRequester
 
 class MoviesAPI(CustomRequester):
-    def __init__(self, session, token=None):
+    def __init__(self, session):
         super().__init__(session, BASE_URL)
-        if token:
-            self.headers.update({"Authorization": f"Bearer {token}"})
+
 
     def create_movie(self, movie_data, expected_status=HTTPStatus.CREATED):
         return self.send_request(

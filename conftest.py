@@ -1,12 +1,12 @@
 from faker import Faker
 import pytest
 import requests
-from constants import BASE_URL, REGISTER_ENDPOINT, LOGIN_ENDPOINT
+import uuid
+from constants import BASE_URL, REGISTER_ENDPOINT
 from custom_requester.custom_requester import CustomRequester
 from utils.data_generator import DataGeneration
 import random
 from clients.movies_api import MoviesAPI
-faker = Faker()
 fake = Faker()
 
 @pytest.fixture(scope="session")
@@ -51,33 +51,24 @@ def requester():
     return CustomRequester(session=session, base_url=BASE_URL)
 
 
-
-
 @pytest.fixture(scope="session")
-def super_admin_token():
-    # Укажите URL и полезную нагрузку в соответствии с вашей системой авторизации
-    auth_url = "https://auth.dev-cinescope.coconutqa.ru/login"
-    response = requests.post(auth_url, json={"email": "api1@gmail.com", "password": "asdqwe123Q"})
-    assert response.status_code == 200
-    return response.json()["accessToken"]
-
-
-
+def movies_api(requester):
+    client = MoviesAPI(session=requester.session)
+    client.authenticate(email="api1@gmail.com", password="asdqwe123Q")
+    return client
 
 
 @pytest.fixture
-def random_movie():
-    """Фикстура, которая возвращает готовый словарь с данными фильма"""
+def random_movie(faker):
+    unique_suffix = uuid.uuid4().hex[:10]
     return {
-        "name": fake.sentence(nb_words=3),
-        "description": fake.paragraph(nb_sentences=2),
-        "price": random.choice([199, 299, 399, 499, 999]),
+        "name": f"{faker.sentence(nb_words=2).rstrip('.')} {unique_suffix}",
+        "description": faker.text(max_nb_chars=80),
+        "price": 499,
         "location": "SPB",
         "published": True,
-        "genreId": 1
+        "genreId": 1,
     }
-
-
 
 @pytest.fixture
 def created_movie(movies_api, random_movie):
@@ -85,16 +76,10 @@ def created_movie(movies_api, random_movie):
     Фикстура создает фильм, используя методы клиента MoviesAPI.
     """
     response = movies_api.create_movie(random_movie)
-    return response.json()
-
-
-@pytest.fixture(scope="session")
-def movies_api(requester, super_admin_token):
-    """
-    Фикстура для доступа к методам MoviesAPI.
-    Токен прокидывается один раз при создании клиента.
-    """
-    return MoviesAPI(session=requester.session, token=super_admin_token)
+    movie = response.json()
+    yield movie
+    # После каждого теста удаляем фильм из БД
+    movies_api.delete_movie(movie["id"], expected_status=(200,404))
 
 @pytest.fixture
 def unauthorized_movies_api():
@@ -103,4 +88,4 @@ def unauthorized_movies_api():
     Используется для тестов на проверку прав доступа (401 Unauthorized).
     """
     session = requests.Session()
-    return MoviesAPI(session=session, token=None)
+    return MoviesAPI(session=session)
