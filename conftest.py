@@ -5,9 +5,10 @@ import uuid
 from constants import BASE_URL, REGISTER_ENDPOINT
 from custom_requester.custom_requester import CustomRequester
 from utils.data_generator import DataGeneration
-import random
 from clients.movies_api import MoviesAPI
+
 fake = Faker()
+
 
 @pytest.fixture(scope="session")
 def test_user():
@@ -26,6 +27,7 @@ def test_user():
         "roles": ["USER"]
     }
 
+
 @pytest.fixture(scope="session")
 def registered_user(requester, test_user):
     """
@@ -41,6 +43,7 @@ def registered_user(requester, test_user):
     registered_user = test_user.copy()
     registered_user["id"] = response_data["id"]
     return registered_user
+
 
 @pytest.fixture(scope="session")
 def requester():
@@ -70,16 +73,30 @@ def random_movie(faker):
         "genreId": 1,
     }
 
+
 @pytest.fixture
 def created_movie(movies_api, random_movie):
     """
-    Фикстура создает фильм, используя методы клиента MoviesAPI.
+    Фикстура создает фильм без последующего удаления.
+    Используется в тестах на удаление, где удаление проверяется явно.
     """
     response = movies_api.create_movie(random_movie)
     movie = response.json()
     yield movie
-    # После каждого теста удаляем фильм из БД
-    movies_api.delete_movie(movie["id"], expected_status=(200,404))
+
+
+@pytest.fixture
+def created_movie_with_cleanup(movies_api, created_movie):
+    """
+    Фикстура создает фильм и гарантирует его удаление после теста.
+    Вызывает created_movie, возвращает созданный фильм через yield,
+    а после завершения теста удаляет фильм из БД.
+    Используется во всех тестах, кроме тестов на удаление.
+    """
+    yield created_movie
+
+    movies_api.delete_movie(created_movie["id"], expected_status=(200, 404))
+
 
 @pytest.fixture
 def unauthorized_movies_api():
