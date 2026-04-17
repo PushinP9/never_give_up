@@ -1,5 +1,3 @@
-
-
 import pytest
 from http import HTTPStatus
 
@@ -8,8 +6,8 @@ def test_movies_list_contains_new_movie_last_page(movies_api, created_movie_with
     page_size = 20
     pages_to_check = 5
 
-    resp = movies_api.get_movies(params={"page": 1, "pageSize": page_size}, expected_status=HTTPStatus.OK)
-    data = resp.json()
+    response = movies_api.get_movies(params={"page": 1, "pageSize": page_size}, expected_status=HTTPStatus.OK)
+    data = response.json()
     page_count = data["pageCount"]
     found = None
     start_page = page_count
@@ -32,9 +30,9 @@ def test_movies_list_contains_new_movie_last_page(movies_api, created_movie_with
     assert found["name"] == created_movie_with_cleanup["name"]
     assert found["price"] == created_movie_with_cleanup["price"]
 
-    resp = movies_api.get_movie(movie_id, expected_status=HTTPStatus.OK)
-    db_data = resp.json()
-    assert db_data["id"] == movie_id
+    get_response = movies_api.get_movie(movie_id, expected_status=HTTPStatus.OK)
+    response_movie = get_response.json()
+    assert response_movie["id"] == movie_id
 
 
 def test_get_movie_details_by_id(movies_api, created_movie_with_cleanup):
@@ -52,25 +50,16 @@ def test_get_movie_details_by_id(movies_api, created_movie_with_cleanup):
 
 
 def test_movies_post_duplicate(movies_api, created_movie_with_cleanup):
-    payload = {
-        "name": created_movie_with_cleanup["name"],
-        "description": created_movie_with_cleanup["description"],
-        "price": created_movie_with_cleanup["price"],
-        "location": created_movie_with_cleanup["location"],
-        "published": created_movie_with_cleanup["published"],
-        "genreId": created_movie_with_cleanup["genreId"],
-    }
-
-    resp = movies_api.create_movie(payload, expected_status=HTTPStatus.CONFLICT)
-    err = resp.json()
+    duplicate_response = movies_api.create_movie(created_movie_with_cleanup, expected_status=HTTPStatus.CONFLICT)
+    err = duplicate_response.json()
 
     assert err["statusCode"] == HTTPStatus.CONFLICT
     assert "message" in err
 
-    resp = movies_api.get_movie(created_movie_with_cleanup["id"], expected_status=HTTPStatus.OK)
-    original = resp.json()
-    assert original["id"] == created_movie_with_cleanup["id"]
-    assert original["name"] == created_movie_with_cleanup["name"]
+    get_response = movies_api.get_movie(created_movie_with_cleanup["id"], expected_status=HTTPStatus.OK)
+    existing_movie = get_response.json()
+    assert existing_movie["id"] == created_movie_with_cleanup["id"]
+    assert existing_movie["name"] == created_movie_with_cleanup["name"]
 
 
 def test_patch_movie_name(movies_api, created_movie_with_cleanup):
@@ -84,9 +73,9 @@ def test_patch_movie_name(movies_api, created_movie_with_cleanup):
     assert updated_data["id"] == movie_id
 
     response = movies_api.get_movie(movie_id)
-    db_data = response.json()
-    assert db_data["name"] == new_name, "Имя фильма не обновилось в БД!"
-    assert db_data["id"] == movie_id
+    response_movie = response.json()
+    assert response_movie["name"] == new_name, "Имя фильма не обновилось в БД!"
+    assert response_movie["id"] == movie_id
 
 def test_patch_movie_price(movies_api, created_movie_with_cleanup):
     movie_id = created_movie_with_cleanup["id"]
@@ -99,11 +88,11 @@ def test_patch_movie_price(movies_api, created_movie_with_cleanup):
     assert updated_data["id"] == movie_id
 
     response = movies_api.get_movie(movie_id)
-    db_data = response.json()
-    assert db_data["price"] == new_price
+    data = response.json()
+    assert data["price"] == new_price
 
 
-def test_delete_movie_flow(movies_api, created_movie):
+def test_delete_movie(movies_api, created_movie):
     movie_id = created_movie["id"]
 
     response = movies_api.delete_movie(movie_id)

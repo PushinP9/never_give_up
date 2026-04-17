@@ -1,4 +1,3 @@
-
 from custom_requester.custom_requester import CustomRequester
 from constants import LOGIN_ENDPOINT, REGISTER_ENDPOINT
 
@@ -50,7 +49,7 @@ class AuthAPI(CustomRequester):
         if not token:
             raise KeyError("token is missing")
 
-        self._update_session_headers(self.session, Authorization=f"Bearer {token}")
+        self.update_session_headers(self.session, Authorization=f"Bearer {token}")
 
         return {
             "accessToken": token,

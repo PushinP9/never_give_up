@@ -1,9 +1,4 @@
-from http.client import responses
-
-import pytest
 import requests
-from Tools.scripts.fixdiv import report
-
 from constants import BASE_URL, HEADERS, LOGIN_ENDPOINT
 
 
