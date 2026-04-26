@@ -285,17 +285,36 @@ def test_delete_movie_twice(movies_api, created_movie):
     assert error_data["statusCode"] == HTTPStatus.NOT_FOUND
     assert "message" in error_data
 
+def test_delete_movie_allowed_for_super_admin(movies_api, random_movie):
+        post_response = movies_api.create_movie(
+            random_movie,
+            expected_status=HTTPStatus.CREATED
+        )
+        created_movie_data = post_response.json()
+        movie_id = created_movie_data["id"]
+
+        delete_response = movies_api.delete_movie(
+            movie_id,
+            expected_status=HTTPStatus.OK
+        )
+        deleted_movie = delete_response.json()
+
+        assert deleted_movie["id"] == movie_id
+
+        movies_api.get_movie(movie_id, expected_status=HTTPStatus.NOT_FOUND)
+
 
 @pytest.mark.parametrize(
-    "role, expected_status",
-    [
-        ("SUPER_ADMIN", HTTPStatus.OK),
-        ("ADMIN", HTTPStatus.FORBIDDEN),
-        ("USER", HTTPStatus.FORBIDDEN),
-    ],
-    ids=["super_admin", "admin", "user"],
+    "role",
+    ["ADMIN", "USER"],
+    ids=["admin", "user"]
 )
-def test_delete_movie_role_based(movies_api, user_with_role, random_movie, role, expected_status):
+def test_delete_movie_forbidden_for_non_super_admin(
+    movies_api,
+    user_with_role,
+    random_movie,
+    role
+):
     post_response = movies_api.create_movie(
         random_movie,
         expected_status=HTTPStatus.CREATED
@@ -303,24 +322,19 @@ def test_delete_movie_role_based(movies_api, user_with_role, random_movie, role,
     created_movie_data = post_response.json()
     movie_id = created_movie_data["id"]
 
-    client = movies_api if role == "SUPER_ADMIN" else user_with_role(role)
+    client = user_with_role(role)
 
     delete_response = client.delete_movie(
         movie_id,
-        expected_status=expected_status
+        expected_status=HTTPStatus.FORBIDDEN
     )
+    error_data = delete_response.json()
 
-    if expected_status == HTTPStatus.OK:
-        deleted_movie = delete_response.json()
-        assert deleted_movie["id"] == movie_id
+    assert error_data["statusCode"] == HTTPStatus.FORBIDDEN
 
-        movies_api.get_movie(movie_id, expected_status=HTTPStatus.NOT_FOUND)
-    else:
-        error_data = delete_response.json()
-        assert error_data["statusCode"] == HTTPStatus.FORBIDDEN
+    movies_api.get_movie(movie_id, expected_status=HTTPStatus.OK)
 
-        movies_api.get_movie(movie_id, expected_status=HTTPStatus.OK)
-        movies_api.delete_movie(movie_id, expected_status=HTTPStatus.OK)
+    movies_api.delete_movie(movie_id, expected_status=HTTPStatus.OK)
 
 
 def test_login_with_invalid_password(auth_requester, registered_user):
