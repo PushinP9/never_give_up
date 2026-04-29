@@ -1,9 +1,8 @@
-
 import json
 import requests
 import logging
 import os
-
+from constants import LOGIN_ENDPOINT,LOGIN_URL
 class CustomRequester:
     """
     Кастомный реквестер для стандартизации и упрощения отправки HTTP-запросов.
@@ -20,13 +19,27 @@ class CustomRequester:
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
 
-    def send_request(self, method, endpoint, data=None, expected_status=200, need_logging=True):
+
+    def authenticate(self, email, password):
+        url = f"{LOGIN_URL}{LOGIN_ENDPOINT}"
+        response = requests.post(url, json={"email": email, "password": password})
+        token = response.json()["accessToken"]
+        self.headers.update({"Authorization": f"Bearer {token}"})
+        return self
+
+    def send_request(self, method, endpoint, data=None, params=None, expected_status=200, need_logging=True):
         url = f"{self.base_url}{endpoint}"
-        response = self.session.request(method, url, json=data)
+        response = self.session.request(method, url, json=data, params=params,headers=self.headers)
         if need_logging:
             self.log_request_and_response(response)
-        if response.status_code != expected_status:
+        if isinstance(expected_status, (tuple, list, set)):
+            ok = response.status_code in expected_status
+        else:
+            ok = response.status_code == expected_status
+
+        if not ok:
             raise ValueError(f"Unexpected status code: {response.status_code}. Expected: {expected_status}")
+
         return response
 
     def log_request_and_response(self, response):
@@ -37,7 +50,6 @@ class CustomRequester:
             RESET = '\033[0m'
             headers = " \\\n".join([f"-H '{header}: {value}'" for header, value in request.headers.items()])
             full_test_name = f"pytest {os.environ.get('PYTEST_CURRENT_TEST', '').replace(' (call)', '')}"
-
             body = ""
             if hasattr(request, 'body') and request.body is not None:
                 if isinstance(request.body, bytes):
@@ -73,20 +85,3 @@ class CustomRequester:
         except Exception as e:
             self.logger.error(f"\nLogging failed: {type(e)} - {e}")
 
-    def send_request(self, method, endpoint, data=None, expected_status=200, need_logging=True):
-        """
-        Универсальный метод для отправки запросов.
-        :param method: HTTP метод (GET, POST, PUT, DELETE и т.д.).
-        :param endpoint: Эндпоинт (например, "/login").
-        :param data: Тело запроса (JSON-данные).
-        :param expected_status: Ожидаемый статус-код (по умолчанию 200).
-        :param need_logging: Флаг для логирования (по умолчанию True).
-        :return: Объект ответа requests.Response.
-        """
-        url = f"{self.base_url}{endpoint}"
-        response = self.session.request(method, url, json=data, headers=self.headers)
-        if need_logging:
-            self.log_request_and_response(response)
-        if response.status_code != expected_status:
-            raise ValueError(f"Unexpected status code: {response.status_code}. Expected: {expected_status}")
-        return response
