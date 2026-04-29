@@ -1,12 +1,15 @@
 from faker import Faker
 import pytest
 import requests
-from constants import BASE_URL, REGISTER_ENDPOINT, LOGIN_ENDPOINT
+import uuid
+from constants import BASE_URL, REGISTER_ENDPOINT,LOGIN_URL
 from custom_requester.custom_requester import CustomRequester
 from utils.data_generator import DataGeneration
-import random
-faker = Faker()
+from clients.movies_api import MoviesAPI
+
+
 fake = Faker()
+
 
 @pytest.fixture(scope="session")
 def test_user():
@@ -25,21 +28,22 @@ def test_user():
         "roles": ["USER"]
     }
 
+
 @pytest.fixture(scope="session")
-def registered_user(requester, test_user):
-    """
-    Фикстура для регистрации и получения данных зарегистрированного пользователя.
-    """
-    response = requester.send_request(
+def registered_user(auth_requester, test_user):
+    response = auth_requester.send_request(
         method="POST",
         endpoint=REGISTER_ENDPOINT,
         data=test_user,
         expected_status=201
     )
+
     response_data = response.json()
-    registered_user = test_user.copy()
-    registered_user["id"] = response_data["id"]
-    return registered_user
+    user = test_user.copy()
+    user["id"] = response_data["id"]
+
+    return user
+
 
 @pytest.fixture(scope="session")
 def requester():
@@ -50,30 +54,91 @@ def requester():
     return CustomRequester(session=session, base_url=BASE_URL)
 
 
-
-
 @pytest.fixture(scope="session")
-def super_admin_token():
-    # Укажите URL и полезную нагрузку в соответствии с вашей системой авторизации
-    auth_url = "https://auth.dev-cinescope.coconutqa.ru/login"
-    response = requests.post(auth_url, json={"email": "api1@gmail.com", "password": "asdqwe123Q"})
-    assert response.status_code == 200
-    return response.json()["accessToken"]
-
-
-
+def movies_api(requester):
+    client = MoviesAPI(session=requester.session)
+    client.authenticate(email="api1@gmail.com", password="asdqwe123Q")
+    return client
 
 
 @pytest.fixture
-def random_movie():
-    """Фикстура, которая возвращает готовый словарь с данными фильма"""
+def random_movie(faker):
+    unique_suffix = uuid.uuid4().hex[:10]
     return {
-        "name": fake.sentence(nb_words=3),
-        "description": fake.paragraph(nb_sentences=2),
-        "price": random.choice([199, 299, 399, 499, 999]),
+        "name": f"{faker.sentence(nb_words=2).rstrip('.')} {unique_suffix}",
+        "description": faker.text(max_nb_chars=80),
+        "price": 499,
         "location": "SPB",
         "published": True,
-        "genreId": 1
+        "genreId": 1,
     }
 
 
+@pytest.fixture
+def created_movie(movies_api, random_movie):
+    response = movies_api.create_movie(
+        random_movie,
+        expected_status=201
+    )
+    return response.json()
+
+
+@pytest.fixture
+def created_movie_with_cleanup(movies_api, created_movie):
+    movie = created_movie
+
+    yield movie
+
+    movies_api.delete_movie(
+        movie["id"],
+        expected_status=200
+    )
+
+
+@pytest.fixture
+def unauthorized_movies_api():
+    """
+    Фикстура создает клиент MoviesAPI без токена авторизации.
+    Используется для тестов на проверку прав доступа (401 Unauthorized).
+    """
+    session = requests.Session()
+    return MoviesAPI(session=session)
+
+@pytest.fixture
+def user_with_role(auth_requester):
+    """
+    Создает пользователя с указанной ролью
+    и возвращает авторизованный MoviesAPI клиент
+    """
+
+    def _create_user(role: str):
+        email = DataGeneration.generate_random_email()
+        password = DataGeneration.generate_random_password()
+
+        user_data = {
+            "email": email,
+            "fullName": DataGeneration.generate_random_name(),
+            "password": password,
+            "passwordRepeat": password,
+            "roles": [role],
+        }
+
+        auth_requester.send_request(
+            method="POST",
+            endpoint=REGISTER_ENDPOINT,
+            data=user_data,
+            expected_status=201
+        )
+
+        client = MoviesAPI(session=requests.Session())
+        client.authenticate(email=email, password=password)
+
+        return client
+
+    return _create_user
+
+
+@pytest.fixture(scope="session")
+def auth_requester():
+    session = requests.Session()
+    return CustomRequester(session=session, base_url=LOGIN_URL)

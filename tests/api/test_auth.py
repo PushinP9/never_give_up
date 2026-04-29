@@ -1,4 +1,3 @@
-import pytest
 from constants import REGISTER_ENDPOINT, LOGIN_ENDPOINT
 
 

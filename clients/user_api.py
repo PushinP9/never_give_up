@@ -32,11 +32,3 @@ class UserAPI(CustomRequester):
             endpoint=f"/user/{user_id}",
             expected_status=expected_status
         )
-    def _update_session_headers(self, **kwargs):
-        """
-        Обновление заголовков сессии.
-        :param session: Объект requests.Session, предоставленный API-классом.
-        :param kwargs: Дополнительные заголовки.
-        """
-        self.headers.update(kwargs)  # Обновляем базовые заголовки
-        self.session.headers.update(self.headers)  # Обновляем заголовки в текущей сессии
