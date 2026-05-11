@@ -1,8 +1,8 @@
 import pytest
 from http import HTTPStatus
-from constants import LOGIN_ENDPOINT
+from constants.constants import LOGIN_ENDPOINT
 
-
+@pytest.mark.smoke
 def test_created_movie_available_by_id(movies_api, created_movie_with_cleanup):
     movie_id = created_movie_with_cleanup["id"]
 
@@ -53,7 +53,7 @@ def test_movies_post_duplicate(movies_api, created_movie_with_cleanup):
     assert existing_movie["id"] == created_movie_with_cleanup["id"]
     assert existing_movie["name"] == created_movie_with_cleanup["name"]
 
-
+@pytest.mark.regression
 def test_patch_movie_name(movies_api, created_movie_with_cleanup):
     movie_id = created_movie_with_cleanup["id"]
     new_name = "Обновленный фильм123"
@@ -78,6 +78,7 @@ def test_patch_movie_name(movies_api, created_movie_with_cleanup):
     assert movie_data["price"] == created_movie_with_cleanup["price"]
 
 
+@pytest.mark.regression
 def test_patch_movie_price(movies_api, created_movie_with_cleanup):
     movie_id = created_movie_with_cleanup["id"]
     new_price = 1299
@@ -101,7 +102,7 @@ def test_patch_movie_price(movies_api, created_movie_with_cleanup):
     assert movie_data["price"] == new_price
     assert movie_data["name"] == created_movie_with_cleanup["name"]
 
-
+@pytest.mark.smoke
 def test_delete_movie(movies_api, created_movie):
     movie_id = created_movie["id"]
 
@@ -226,7 +227,7 @@ def test_patch_movie_with_invalid_id(movies_api):
     assert error_data["statusCode"] == HTTPStatus.NOT_FOUND
     assert "message" in error_data
 
-
+@pytest.mark.regression
 def test_patch_movie_unauthorized(movies_api, unauthorized_movies_api, created_movie_with_cleanup):
     movie_id = created_movie_with_cleanup["id"]
     original_name = created_movie_with_cleanup["name"]
@@ -303,7 +304,7 @@ def test_delete_movie_allowed_for_super_admin(movies_api, random_movie):
 
         movies_api.get_movie(movie_id, expected_status=HTTPStatus.NOT_FOUND)
 
-
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "role",
     ["ADMIN", "USER"],
@@ -389,3 +390,19 @@ def test_login_with_empty_data(auth_requester):
 
     assert error_data["statusCode"] == HTTPStatus.UNAUTHORIZED
     assert "Неверный логин или пароль" in error_data["message"]
+
+@pytest.mark.slow
+def test_user_cannot_create_movie(common_user, random_movie):
+    common_user.api.movies_api.create_movie(
+        random_movie,
+        expected_status=403
+    )
+
+def test_super_admin_can_create_movie(super_admin, random_movie):
+
+    response = super_admin.api.movies_api.create_movie(
+        random_movie,
+        expected_status=201
+    )
+
+    assert response.json()["id"] is not None

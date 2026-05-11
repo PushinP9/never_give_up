@@ -1,5 +1,5 @@
 import requests
-from constants import BASE_URL, HEADERS, LOGIN_ENDPOINT
+from constants.constants import BASE_URL, HEADERS, LOGIN_ENDPOINT
 
 
 class TestLoginSuccess:

@@ -2,7 +2,7 @@ import json
 import requests
 import logging
 import os
-from constants import LOGIN_ENDPOINT,LOGIN_URL
+from constants.constants import LOGIN_ENDPOINT,LOGIN_URL
 class CustomRequester:
     """
     Кастомный реквестер для стандартизации и упрощения отправки HTTP-запросов.
@@ -12,10 +12,11 @@ class CustomRequester:
         "Accept": "application/json"
     }
 
-    def __init__(self, session, base_url):
+    def __init__(self, session, base_url, headers=None):
         self.session = session
         self.base_url = base_url
-        self.headers = self.base_headers.copy()
+        self.headers = base_url
+        self.headers = headers if headers is not None else self.base_headers.copy()
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
 
