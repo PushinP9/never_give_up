@@ -12,9 +12,15 @@ class ApiManager:
         :param session: HTTP-сессия, используемая всеми API-классами.
         """
         self.session = session
-        self.auth_api = AuthAPI(session)
-        self.user_api = UserAPI(session)
-        self.movies_api = MoviesAPI(session)
+        shared_headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        self.auth_api = AuthAPI(session, headers=shared_headers)
+        self.user_api = UserAPI(session, headers=shared_headers)
+        self.movies_api = MoviesAPI(session, headers=shared_headers)
+
 
     def close_session(self):
         self.session.close()
+

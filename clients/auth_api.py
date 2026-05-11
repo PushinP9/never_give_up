@@ -1,57 +1,70 @@
+from http import HTTPStatus
 from custom_requester.custom_requester import CustomRequester
-from constants import LOGIN_ENDPOINT, REGISTER_ENDPOINT
+from constants.constants import LOGIN_URL, LOGIN_ENDPOINT, REGISTER_ENDPOINT
+from models.model_test_user import (
+    RegisterUserRequest,
+    RegisterUserResponse
+)
+
 
 class AuthAPI(CustomRequester):
-    """
-      Класс для работы с аутентификацией.
-      """
 
-    def __init__(self, session):
-        super().__init__(session=session, base_url="https://auth.dev-cinescope.coconutqa.ru/")
+    def __init__(self, session, headers=None):
+        super().__init__(session=session, base_url=LOGIN_URL, headers=headers)
 
-    def register_user(self, user_data, expected_status=201):
-        """
-        Регистрация нового пользователя.
-        :param user_data: Данные пользователя.
-        :param expected_status: Ожидаемый статус-код.
-        """
+    def register_user(
+        self,
+        user_data: RegisterUserRequest,
+        expected_status=HTTPStatus.CREATED
+    ) -> RegisterUserResponse:
 
-        return self.send_request(
-            method='POST',
-            endpoint=REGISTER_ENDPOINT,
-            data=user_data,
-            expected_status=expected_status
-        )
-
-    def login_user(self, login_data, expected_status=None):
-        if expected_status is None:
-            expected_status = [200, 201]
-
-        return self.send_request(
+        response = self.send_request(
             method="POST",
-            endpoint=LOGIN_ENDPOINT,
-            data=login_data,
+            endpoint=REGISTER_ENDPOINT,  # /register
+            data=user_data.model_dump(mode="json", exclude_unset=True),
             expected_status=expected_status
         )
 
-    def authenticate(self, user_creds, expected_status=None):
-        if expected_status is None:
-            expected_status = [200, 201]
+        return RegisterUserResponse(**response.json())
 
-        login_data = {
-            "email": user_creds[0],
-            "password": user_creds[1]
-        }
+    def login_user(
+        self,
+        email: str,
+        password: str,
+        expected_status=HTTPStatus.OK
+    ) -> dict:
 
-        response_json = self.login_user(login_data, expected_status=expected_status).json()
+        response = self.send_request(
+            method="POST",
+            endpoint=LOGIN_ENDPOINT,  # /login
+            data={
+                "email": email,
+                "password": password
+            },
+            expected_status=expected_status
+        )
 
-        token = response_json.get("accessToken")
+        return response.json()
+
+    def authenticate(
+        self,
+        email: str,
+        password: str,
+        expected_status=HTTPStatus.OK
+    ) -> dict:
+
+        login_response = self.login_user(
+            email=email,
+            password=password,
+            expected_status=expected_status
+        )
+
+        token = login_response.get("accessToken")
         if not token:
-            raise KeyError("token is missing")
+            raise KeyError("accessToken is missing in login response")
 
-        self.update_session_headers(self.session, Authorization=f"Bearer {token}")
+        self.session.headers.update({
+            "Authorization": f"Bearer {token}"
+        })
 
-        return {
-            "accessToken": token,
-            "user": response_json.get("user")
-        }
+        return login_response

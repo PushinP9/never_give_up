@@ -1,9 +1,9 @@
 from http import HTTPStatus,HTTPMethod
-from constants import MOVIES_ENDPOINT, BASE_URL
+from constants.constants import MOVIES_ENDPOINT, BASE_URL
 from custom_requester.custom_requester import CustomRequester
 
 class MoviesAPI(CustomRequester):
-    def __init__(self, session):
+    def __init__(self, session,headers=None):
         super().__init__(session, BASE_URL)
 
 
