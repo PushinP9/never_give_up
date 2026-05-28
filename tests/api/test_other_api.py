@@ -1,61 +1,125 @@
-import requests
-from constants.constants import BASE_URL, HEADERS, LOGIN_ENDPOINT
+import pytest
+from http import HTTPStatus
+from utils.data_generator import DataGeneration
+from db_models.db_transaction import AccountTransactionTemplate
+from sqlalchemy.orm import Session
+import allure
+from constants.constants import LOGIN_ENDPOINT
 
 
 class TestLoginSuccess:
 
     def test_status_code(self, login_response):
-        assert login_response.status_code == 200
+        assert login_response.status_code == HTTPStatus.OK
 
-    def test_has_access_token(self,login_response):
+    def test_has_access_token(self, login_response):
         data = login_response.json()
-        assert "accessToken" in data, "Нет поля accessToken"
-        assert len(data["accessToken"]) > 0, "accessToken пустой"
 
-    def test_has_user_with_email(self,login_response, test_user):
+        assert "accessToken" in data
+        assert len(data["accessToken"]) > 0
+
+    def test_has_user_with_email(self, login_response, test_user):
         data = login_response.json()
-        assert  "user" in data, "Нет поля user"
-        assert data["user"]["email"] == test_user["email"], "Email не совпадает"
 
+        assert "user" in data
+        assert data["user"]["email"] == test_user.email
 
 
 class TestLoginNegative:
 
-    def test_login_wrong_password(self, test_user):
-        login_url = f'{BASE_URL}{LOGIN_ENDPOINT}'
+    @pytest.mark.parametrize(
+        "email, password, expected_status",
+        [
+            ("wrong@email.com", "Password123", HTTPStatus.UNAUTHORIZED),
+            ("", "Password123", HTTPStatus.UNAUTHORIZED),
+            ("valid@email.com", "", HTTPStatus.UNAUTHORIZED),
+        ]
+    )
+    def test_login_negative_cases(
+        self,
+        auth_requester,
+        test_user,
+        email,
+        password,
+        expected_status
+    ):
         login_data = {
-            "email": test_user["email"],
-            "password": "password123qwe"
+            "email": email if email != "valid@email.com" else test_user.email,
+            "password": password if password != "Password123" else test_user.password
         }
 
-        response = requests.post(login_url, json=login_data, headers=HEADERS)
-        assert response.status_code in [401, 403]
+        response = auth_requester.send_request(
+            method="POST",
+            endpoint=LOGIN_ENDPOINT,
+            data=login_data,
+            expected_status=expected_status
+        )
 
-    def test_login_wrong_email(self,test_user):
-        login_url = f'{BASE_URL}{LOGIN_ENDPOINT}'
-        login_data = {
-            "email": "123qwe@gmail.com",
-            "password": test_user["password"]
-        }
-        response = requests.post(login_url, json=login_data, headers=HEADERS)
-        assert response.status_code in [401,403,404]
+        assert response.status_code == expected_status
 
-    def test_login_empty_email(self):
-        login_url = f'{BASE_URL}{LOGIN_ENDPOINT}'
-        login_data = {
-            "email": "",
-            "password": "password"
-        }
+@allure.epic("Тестирование транзакций")
+@allure.feature("Тестирование транзакций между счетами")
+class TestAccountTransactionTemplate:
 
-        response = requests.post(login_url,json=login_data, headers=HEADERS)
-        assert response.status_code in [400, 401,]
+    @allure.story("Недостаточно средств при переводе между двумя счетами")
+    @allure.description("""
+    Этот тест проверяет, что при недостатке средств перевод не выполняется,
+    а балансы в базе данных остаются без изменений.
+    Шаги:
+    1. Создание двух счетов: Stan и Bob.
+    2. Попытка перевода 200 единиц от Stan к Bob при балансе Stan = 100.
+    3. Проверка ошибки о недостатке средств.
+    4. Проверка неизменности балансов в БД.
+    5. Очистка тестовых данных.
+    """)
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.label("qa_name", "Ivan Petrovich")
+    @allure.title("Тест: перевод отклоняется при недостатке средств")
+    def test_accounts_transaction_template(self, db_session: Session):
+        with allure.step("Создание тестовых данных в базе данных: счета Stan и Bob"):
+            stan = AccountTransactionTemplate(
+                user=f"Stan_{DataGeneration.generate_random_int(10)}",
+                balance=100
+            )
+            bob = AccountTransactionTemplate(
+                user=f"Bob_{DataGeneration.generate_random_int(10)}",
+                balance=500
+            )
+            db_session.add_all([stan, bob])
+            db_session.commit()
 
-    def test_login_empty_password(self,test_user):
-        login_url = f'{BASE_URL}{LOGIN_ENDPOINT}'
-        login_data = {
-            "email": test_user["email"],
-            "password": ""
-        }
+        @allure.step("Функция перевода денег: transfer_money")
+        def transfer_money(session, from_account, to_account, amount):
+            from_account = session.query(AccountTransactionTemplate).filter_by(user=from_account).one()
+            to_account = session.query(AccountTransactionTemplate).filter_by(user=to_account).one()
 
-        response = requests.post(login_url,json=login_data, headers=HEADERS)
-        assert response.status_code in [400, 401,]
+            if from_account.balance < amount:
+                raise ValueError("Недостаточно средств на счете")
+
+            from_account.balance -= amount
+            to_account.balance += amount
+            session.commit()
+
+        try:
+            with allure.step("Проверяем начальные балансы"):
+                assert stan.balance == 100
+                assert bob.balance == 500
+
+            with allure.step("Пытаемся выполнить перевод 200 единиц от Stan к Bob"):
+                with pytest.raises(ValueError, match="Недостаточно средств на счете"):
+                    transfer_money(db_session, from_account=stan.user, to_account=bob.user, amount=200)
+
+            with allure.step("Проверяем, что балансы в базе данных не изменились"):
+                db_stan = db_session.query(AccountTransactionTemplate).filter_by(user=stan.user).one()
+                db_bob = db_session.query(AccountTransactionTemplate).filter_by(user=bob.user).one()
+
+                assert db_stan.balance == 100
+                assert db_bob.balance == 500
+                assert stan.balance == 100
+                assert bob.balance == 500
+
+        finally:
+            with allure.step("Удаляем данные для тестирования из базы"):
+                db_session.delete(stan)
+                db_session.delete(bob)
+                db_session.commit()

@@ -392,11 +392,24 @@ def test_login_with_empty_data(auth_requester):
     assert "Неверный логин или пароль" in error_data["message"]
 
 @pytest.mark.slow
-def test_user_cannot_create_movie(common_user, random_movie):
-    common_user.api.movies_api.create_movie(
+def test_user_cannot_create_movie(common_user, super_admin, random_movie):
+
+    response = common_user.api.movies_api.create_movie(
         random_movie,
         expected_status=403
     )
+
+    error_data = response.json()
+
+    assert error_data["statusCode"] == 403
+    assert "Forbidden" in error_data["message"]
+
+    movies = super_admin.api.movies_api.get_movies(
+        params={"page": 1, "pageSize": 20},
+        expected_status=200
+    ).json()["movies"]
+
+    assert all(movie["name"] != random_movie["name"] for movie in movies)
 
 def test_super_admin_can_create_movie(super_admin, random_movie):
 
@@ -405,4 +418,23 @@ def test_super_admin_can_create_movie(super_admin, random_movie):
         expected_status=201
     )
 
-    assert response.json()["id"] is not None
+    movie_data = response.json()
+
+    assert movie_data["id"] is not None
+    assert movie_data["name"] == random_movie["name"]
+    assert movie_data["price"] == random_movie["price"]
+    assert movie_data["location"] == random_movie["location"]
+
+    movie_id = movie_data["id"]
+
+    created_movie = super_admin.api.movies_api.get_movie(
+        movie_id,
+        expected_status=200
+    ).json()
+
+    assert created_movie["name"] == random_movie["name"]
+
+    super_admin.api.movies_api.delete_movie(
+        movie_id,
+        expected_status=200
+    )

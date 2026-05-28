@@ -2,7 +2,7 @@ from faker import Faker
 import pytest
 import requests
 import uuid
-from constants.constants import BASE_URL, REGISTER_ENDPOINT,LOGIN_URL
+from constants.constants import BASE_URL, REGISTER_ENDPOINT,LOGIN_URL,LOGIN_ENDPOINT
 from custom_requester.custom_requester import CustomRequester
 from entities.user import User
 from utils.data_generator import DataGeneration
@@ -11,6 +11,9 @@ from clients.api_manager import ApiManager
 from resources.user_creds import SuperAdminCreds
 from constants.roles import Roles
 from models.model_test_user import RegisterUserRequest
+from sqlalchemy.orm import Session
+from db_requester.db_client import get_db_session
+from db_requester.db_helpers import DBHelper
 fake = Faker()
 
 
@@ -250,3 +253,52 @@ def admin_user(user_session, super_admin):
     )
 
     return admin
+
+
+
+@pytest.fixture
+def login_response(auth_requester, registered_user):
+
+    login_data = {
+        "email": registered_user["email"],
+        "password": registered_user["password"]
+    }
+
+    response = auth_requester.send_request(
+        method="POST",
+        endpoint=LOGIN_ENDPOINT,
+        data=login_data,
+        expected_status=200
+    )
+
+    return response
+
+@pytest.fixture(scope="module")
+def db_session() -> Session:
+    """
+    Фикстура, которая создает и возвращает сессию для работы с базой данных
+    После завершения теста сессия автоматически закрывается
+    """
+    db_session = get_db_session()
+    yield db_session
+    db_session.close()
+
+@pytest.fixture(scope="function")
+def db_helper(db_session) -> DBHelper:
+    """
+    Фикстура для экземпляра хелпера
+    """
+    db_helper = DBHelper(db_session)
+    return db_helper
+
+@pytest.fixture(scope="function")
+def created_test_user(db_helper):
+    """
+    Фикстура, которая создает тестового пользователя в БД
+    и удаляет его после завершения теста
+    """
+    user = db_helper.create_test_user(DataGeneration.generate_user_data())
+    yield user
+    # Cleanup после теста
+    if db_helper.get_user_by_id(user.id):
+        db_helper.delete_user(user)

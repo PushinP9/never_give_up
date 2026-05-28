@@ -31,9 +31,14 @@ class TestUser:
 
     @pytest.mark.slow
     def test_get_user_by_id_common_user(self, common_user):
-        common_user.api.user_api.get_user(
+        response = common_user.api.user_api.get_user(
             common_user.id,
             expected_status=403
         )
+
+        error = response.json()
+        assert error["statusCode"] == 403
+        assert "Forbidden" in error["message"]
+
 
 
