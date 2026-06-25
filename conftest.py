@@ -1,8 +1,10 @@
-from faker import Faker
+import uuid
 import pytest
 import requests
-import uuid
-from constants.constants import BASE_URL, REGISTER_ENDPOINT,LOGIN_URL,LOGIN_ENDPOINT
+from faker import Faker
+from sqlalchemy.orm import Session
+
+from constants.constants import BASE_URL, REGISTER_ENDPOINT, LOGIN_URL, LOGIN_ENDPOINT
 from custom_requester.custom_requester import CustomRequester
 from entities.user import User
 from utils.data_generator import DataGeneration
@@ -10,56 +12,45 @@ from clients.movies_api import MoviesAPI
 from clients.api_manager import ApiManager
 from resources.user_creds import SuperAdminCreds
 from constants.roles import Roles
-from models.model_test_user import RegisterUserRequest
-from sqlalchemy.orm import Session
+from models.model_test_user import RegisterUserRequest, RegisterUserResponse
 from db_requester.db_client import get_db_session
 from db_requester.db_helpers import DBHelper
+
 fake = Faker()
-
-
 
 
 @pytest.fixture
 def test_user() -> RegisterUserRequest:
-    """
-    Фикстура возвращает валидированную модель пользователя.
-    """
-
     random_password = DataGeneration.generate_random_password()
-
     return RegisterUserRequest(
         email=DataGeneration.generate_random_email(),
         fullName=DataGeneration.generate_random_name(),
         password=random_password,
         passwordRepeat=random_password,
-        roles=[Roles.USER]
+        roles=[Roles.USER],
     )
 
 
 @pytest.fixture(scope="function")
 def registered_user(auth_requester, test_user: RegisterUserRequest):
-
     payload = test_user.model_dump(mode="json", exclude_unset=True)
 
-    response = auth_requester.send_request(
+    created_user = auth_requester.send_request(
         method="POST",
         endpoint=REGISTER_ENDPOINT,
         data=payload,
-        expected_status=201
+        expected_status=201,
+        success_model=RegisterUserResponse,
     )
-
-    response_data = response.json()
 
     return {
         **payload,
-        "id": response_data["id"]
+        "id": created_user.id,
     }
+
 
 @pytest.fixture(scope="session")
 def requester():
-    """
-    Фикстура для создания экземпляра CustomRequester.
-    """
     session = requests.Session()
     return CustomRequester(session=session, base_url=BASE_URL)
 
@@ -72,11 +63,11 @@ def movies_api(requester):
 
 
 @pytest.fixture
-def random_movie(faker):
+def random_movie():
     unique_suffix = uuid.uuid4().hex[:10]
     return {
-        "name": f"{faker.sentence(nb_words=2).rstrip('.')} {unique_suffix}",
-        "description": faker.text(max_nb_chars=80),
+        "name": f"{fake.sentence(nb_words=2).rstrip('.')} {unique_suffix}",
+        "description": fake.text(max_nb_chars=80),
         "price": 499,
         "location": "SPB",
         "published": True,
@@ -86,39 +77,31 @@ def random_movie(faker):
 
 @pytest.fixture
 def created_movie(movies_api, random_movie):
-    response = movies_api.create_movie(
+    return movies_api.create_movie(
         random_movie,
-        expected_status=201
+        expected_status=201,
     )
-    return response.json()
 
 
 @pytest.fixture
 def created_movie_with_cleanup(movies_api, created_movie):
     movie = created_movie
-
     yield movie
-
     movies_api.delete_movie(
-        movie["id"],
-        expected_status=200
+        movie.id,
+        expected_status=200,
     )
 
 
 @pytest.fixture
 def unauthorized_movies_api():
-    """
-    Фикстура создает клиент MoviesAPI без токена авторизации.
-    Используется для тестов на проверку прав доступа (401 Unauthorized).
-    """
     session = requests.Session()
     return MoviesAPI(session=session)
 
+
 @pytest.fixture
 def user_with_role(auth_requester):
-
     def _create_user(role: Roles):
-
         password = DataGeneration.generate_random_password()
 
         user_model = RegisterUserRequest(
@@ -126,24 +109,22 @@ def user_with_role(auth_requester):
             fullName=DataGeneration.generate_random_name(),
             password=password,
             passwordRepeat=password,
-            roles=[role]
+            roles=[role],
         )
-
-        payload = user_model.model_dump(mode="json")
 
         auth_requester.send_request(
             method="POST",
             endpoint=REGISTER_ENDPOINT,
-            data=payload,
-            expected_status=201
+            data=user_model.model_dump(mode="json"),
+            expected_status=201,
         )
 
         client = MoviesAPI(session=requests.Session())
         client.authenticate(email=user_model.email, password=password)
-
         return client
 
     return _create_user
+
 
 @pytest.fixture(scope="session")
 def auth_requester():
@@ -157,9 +138,9 @@ def user_session():
 
     def _create_user_session():
         session = requests.Session()
-        user_session = ApiManager(session)
-        user_pool.append(user_session)
-        return user_session
+        manager = ApiManager(session)
+        user_pool.append(manager)
+        return manager
 
     yield _create_user_session
 
@@ -171,18 +152,15 @@ def user_session():
 def super_admin(user_session):
     new_session = user_session()
 
-    super_admin = User(
+    admin = User(
         SuperAdminCreds.USERNAME,
         SuperAdminCreds.PASSWORD,
         [Roles.SUPER_ADMIN.value],
-        new_session)
-
-    super_admin.api.auth_api.authenticate(
-        super_admin.creds[0],
-        super_admin.creds[1]
+        new_session,
     )
-    return super_admin
 
+    admin.api.auth_api.authenticate(admin.creds[0], admin.creds[1])
+    return admin
 
 
 @pytest.fixture(scope="function")
@@ -190,40 +168,32 @@ def creation_user_data(test_user: RegisterUserRequest):
     return test_user.model_copy(
         update={
             "verified": True,
-            "banned": False
+            "banned": False,
         }
     )
 
+
 @pytest.fixture
 def common_user(user_session, super_admin, creation_user_data: RegisterUserRequest):
-
     new_session = user_session()
-
-    payload = creation_user_data.model_dump(mode="json")
 
     created_user = super_admin.api.auth_api.register_user(creation_user_data)
 
-    common_user = User(
+    user = User(
         created_user.email,
         creation_user_data.password,
         [Roles.USER.value],
-        new_session
+        new_session,
     )
 
-    common_user.id = created_user.id
-    common_user.api.auth_api.authenticate(
-        common_user.creds[0],
-        common_user.creds[1]
-    )
-
-    return common_user
+    user.id = created_user.id
+    user.api.auth_api.authenticate(user.creds[0], user.creds[1])
+    return user
 
 
 @pytest.fixture
 def admin_user(user_session, super_admin):
-
     new_session = user_session()
-
     password = DataGeneration.generate_random_password()
 
     user_model = RegisterUserRequest(
@@ -233,7 +203,7 @@ def admin_user(user_session, super_admin):
         passwordRepeat=password,
         roles=[Roles.ADMIN],
         verified=True,
-        banned=False
+        banned=False,
     )
 
     created_user = super_admin.api.auth_api.register_user(user_model)
@@ -242,63 +212,42 @@ def admin_user(user_session, super_admin):
         created_user.email,
         password,
         [Roles.ADMIN.value],
-        new_session
+        new_session,
     )
 
     admin.id = created_user.id
-
-    admin.api.auth_api.authenticate(
-        admin.creds[0],
-        admin.creds[1]
-    )
-
+    admin.api.auth_api.authenticate(admin.creds[0], admin.creds[1])
     return admin
-
 
 
 @pytest.fixture
 def login_response(auth_requester, registered_user):
-
-    login_data = {
-        "email": registered_user["email"],
-        "password": registered_user["password"]
-    }
-
-    response = auth_requester.send_request(
+    return auth_requester.send_request(
         method="POST",
         endpoint=LOGIN_ENDPOINT,
-        data=login_data,
-        expected_status=200
+        data={
+            "email": registered_user["email"],
+            "password": registered_user["password"],
+        },
+        expected_status=200,
     )
 
-    return response
 
 @pytest.fixture(scope="module")
 def db_session() -> Session:
-    """
-    Фикстура, которая создает и возвращает сессию для работы с базой данных
-    После завершения теста сессия автоматически закрывается
-    """
-    db_session = get_db_session()
-    yield db_session
-    db_session.close()
+    session = get_db_session()
+    yield session
+    session.close()
+
 
 @pytest.fixture(scope="function")
 def db_helper(db_session) -> DBHelper:
-    """
-    Фикстура для экземпляра хелпера
-    """
-    db_helper = DBHelper(db_session)
-    return db_helper
+    return DBHelper(db_session)
+
 
 @pytest.fixture(scope="function")
 def created_test_user(db_helper):
-    """
-    Фикстура, которая создает тестового пользователя в БД
-    и удаляет его после завершения теста
-    """
     user = db_helper.create_test_user(DataGeneration.generate_user_data())
     yield user
-    # Cleanup после теста
     if db_helper.get_user_by_id(user.id):
         db_helper.delete_user(user)
