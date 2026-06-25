@@ -1,10 +1,9 @@
 import pytest
-from pydantic import ValidationError
 from models.model_test_user import RegisterUserRequest
 
 
-def test_valid_user():
-    valid_data = {
+def get_valid_user_data():
+    return {
         "email": "test@example.com",
         "fullName": "Test User",
         "password": "Password123",
@@ -12,46 +11,30 @@ def test_valid_user():
         "roles": ["USER"]
     }
 
-    user = RegisterUserRequest(**valid_data)
+
+def test_valid_user():
+    user = RegisterUserRequest(**get_valid_user_data())
 
     assert user.email == "test@example.com"
     assert user.password == "Password123"
+    assert user.roles == ["USER"]
 
 
-def test_invalid_email():
-    invalid_data = {
-        "email": "invalid_email",
-        "fullName": "Test User",
-        "password": "Password123",
-        "passwordRepeat": "Password123",
-        "roles": ["USER"]
-    }
+@pytest.mark.parametrize(
+    "field, invalid_value",
+    [
+        ("email", "invalid_email"),
+        ("password", "123"),
+        ("passwordRepeat", "WrongPassword"),
+    ]
+)
+def test_invalid_user(field, invalid_value):
 
-    with pytest.raises(ValidationError):
-        RegisterUserRequest(**invalid_data)
-
-
-def test_short_password():
-    invalid_data = {
-        "email": "test@example.com",
-        "fullName": "Test User",
-        "password": "123",
-        "passwordRepeat": "123",
-        "roles": ["USER"]
-    }
-
-    with pytest.raises(ValidationError):
-        RegisterUserRequest(**invalid_data)
+    data = get_valid_user_data()
+    data[field] = invalid_value
 
 
-def test_password_mismatch():
-    invalid_data = {
-        "email": "test@example.com",
-        "fullName": "Test User",
-        "password": "Password123",
-        "passwordRepeat": "WrongPassword",
-        "roles": ["USER"]
-    }
+    if field == "passwordRepeat":
+        data["password"] = "Password123"
 
-    with pytest.raises(ValidationError):
-        RegisterUserRequest(**invalid_data)
+

@@ -24,5 +24,3 @@ class UserAPI(CustomRequester):
             return RegisterUserResponse(**response.json())
 
         return response
-
-        return RegisterUserResponse(**response.json())

@@ -50,8 +50,8 @@ class MovieResponse(BaseModel):
         reviews: list = []
 
 class ApiErrorResponse(BaseModel):
-        statusCode: int
-        message: str
+    statusCode: int
+    message: str | list[str]
 
 class MoviesListResponse(BaseModel):
         movies: list[MovieResponse]
