@@ -251,3 +251,21 @@ def created_test_user(db_helper):
     yield user
     if db_helper.get_user_by_id(user.id):
         db_helper.delete_user(user)
+
+
+from pages.cinescope_register_page import CinescopeRegisterPage
+from pages.cinescope_login_page import CinescopeLoginPage
+
+
+@pytest.fixture
+def register_page(page):
+    reg_page = CinescopeRegisterPage(page)
+    reg_page.open()
+    return reg_page
+
+
+@pytest.fixture
+def login_page(page):
+    log_page = CinescopeLoginPage(page)
+    log_page.open()
+    return log_page
