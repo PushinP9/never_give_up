@@ -9,3 +9,6 @@ LOGIN_ENDPOINT = "/login"
 REGISTER_ENDPOINT = "/register"
 MOVIES_ENDPOINT = "/movies"
 
+UI_BASE_URL = "https://dev-cinescope.coconutqa.ru"
+UI_LOGIN_PATH = "/login"
+UI_REGISTER_PATH = "/register"

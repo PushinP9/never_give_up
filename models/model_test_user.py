@@ -34,7 +34,24 @@ class RegisterUserResponse(BaseModel):
     id: str
     email: EmailStr
     fullName: str
-    verified: bool
-    banned: bool
+    verified: Optional[bool] = None
+    banned: Optional[bool] = None
     roles: List[Roles]
     createdAt: datetime
+
+class MovieResponse(BaseModel):
+        id: int
+        name: str
+        description: str
+        price: int
+        location: str
+        published: bool
+        genreId: int
+        reviews: list = []
+
+class ApiErrorResponse(BaseModel):
+    statusCode: int
+    message: str | list[str]
+
+class MoviesListResponse(BaseModel):
+        movies: list[MovieResponse]

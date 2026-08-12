@@ -47,12 +47,11 @@ class AuthAPI(CustomRequester):
         return response.json()
 
     def authenticate(
-        self,
-        email: str,
-        password: str,
-        expected_status=HTTPStatus.OK
+            self,
+            email: str,
+            password: str,
+            expected_status=(HTTPStatus.OK, HTTPStatus.CREATED)
     ) -> dict:
-
         login_response = self.login_user(
             email=email,
             password=password,
